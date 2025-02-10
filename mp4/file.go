@@ -187,7 +187,9 @@ LoopBoxes:
 			break LoopBoxes
 		}
 		if err != nil {
-			return nil, err
+			//return nil, err
+			fmt.Printf("error: %v, last box type=%s\n", err, lastBoxType) // FIXME should not consume the error here
+			break LoopBoxes                                               // return what we've parsed so far
 		}
 		boxType, boxSize := box.Type(), box.Size()
 		switch boxType {
