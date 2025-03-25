@@ -12,7 +12,8 @@ type MediaSegment struct {
 	Styp *StypBox
 	Sidx *SidxBox // The first sidx box in a segment
 	// All sidx boxes in a segment, such that SidxsByFrag[i] is the set of sidx boxes that appear before
-	// fragment i, 0-indexed
+	// fragment i, 0-indexed. This slice is always either the same length as Fragments, or one
+	// element longer if the segment is still being constructed.
 	SidxsByFrag [][]*SidxBox
 	Fragments   []*Fragment
 	EncOptimize EncOptimize
@@ -51,16 +52,18 @@ func (s *MediaSegment) AddSidx(sidx *SidxBox) {
 	if s.Sidx == nil {
 		s.Sidx = sidx
 	}
-	fragIdx := len(s.Fragments)
-	for len(s.SidxsByFrag) <= fragIdx {
+	if len(s.SidxsByFrag) == len(s.Fragments) {
 		s.SidxsByFrag = append(s.SidxsByFrag, nil)
 	}
-	s.SidxsByFrag[fragIdx] = append(s.SidxsByFrag[fragIdx], sidx)
+	s.SidxsByFrag[len(s.Fragments)] = append(s.SidxsByFrag[len(s.Fragments)], sidx)
 }
 
 // AddFragment - Add a fragment to a MediaSegment
 func (s *MediaSegment) AddFragment(f *Fragment) {
 	s.Fragments = append(s.Fragments, f)
+	if len(s.SidxsByFrag) < len(s.Fragments) {
+		s.SidxsByFrag = append(s.SidxsByFrag, nil)
+	}
 }
 
 // LastFragment returns the currently last fragment, or nil if no fragments.
@@ -77,10 +80,10 @@ func (s *MediaSegment) Size() uint64 {
 	if s.Styp != nil {
 		size += s.Styp.Size()
 	}
-	if s.Sidx != nil {
-		size += s.Sidx.Size()
-	}
-	for _, f := range s.Fragments {
+	for i, f := range s.Fragments {
+		for _, sidx := range s.SidxsByFrag[i] {
+			size += sidx.Size()
+		}
 		size += f.Size()
 	}
 	return size
@@ -95,12 +98,10 @@ func (s *MediaSegment) Encode(w io.Writer) error {
 		}
 	}
 	for i, f := range s.Fragments {
-		if len(s.SidxsByFrag) > i && len(s.SidxsByFrag[i]) > 0 {
-			for _, sidx := range s.SidxsByFrag[i] {
-				err := sidx.Encode(w)
-				if err != nil {
-					return err
-				}
+		for _, sidx := range s.SidxsByFrag[i] {
+			err := sidx.Encode(w)
+			if err != nil {
+				return err
 			}
 		}
 		f.EncOptimize = s.EncOptimize
@@ -121,12 +122,10 @@ func (s *MediaSegment) EncodeSW(sw bits.SliceWriter) error {
 		}
 	}
 	for i, f := range s.Fragments {
-		if len(s.SidxsByFrag) > i && len(s.SidxsByFrag[i]) > 0 {
-			for _, sidx := range s.SidxsByFrag[i] {
-				err := sidx.EncodeSW(sw)
-				if err != nil {
-					return err
-				}
+		for _, sidx := range s.SidxsByFrag[i] {
+			err := sidx.EncodeSW(sw)
+			if err != nil {
+				return err
 			}
 		}
 		f.EncOptimize = s.EncOptimize
@@ -147,12 +146,10 @@ func (s *MediaSegment) Info(w io.Writer, specificBoxLevels, indent, indentStep s
 		}
 	}
 	for i, f := range s.Fragments {
-		if len(s.SidxsByFrag) > i && len(s.SidxsByFrag[i]) > 0 {
-			for _, sidx := range s.SidxsByFrag[i] {
-				err := sidx.Info(w, specificBoxLevels, indent, indentStep)
-				if err != nil {
-					return err
-				}
+		for _, sidx := range s.SidxsByFrag[i] {
+			err := sidx.Info(w, specificBoxLevels, indent, indentStep)
+			if err != nil {
+				return err
 			}
 		}
 		err := f.Info(w, specificBoxLevels, indent, indentStep)
