@@ -635,9 +635,9 @@ func DecryptSegment(seg *MediaSegment, di DecryptInfo, key []byte) error {
 			return err
 		}
 	}
-	if len(seg.Sidxs) > 0 {
+	if len(seg.SidxsByFrag) > 0 {
 		seg.Sidx = nil // drop sidx inside segment, since not modified properly
-		seg.Sidxs = nil
+		seg.SidxsByFrag = nil
 	}
 	return nil
 }
