@@ -45,7 +45,7 @@ func (b *LhvCBox) Type() string {
 
 // Size - return calculated size
 func (b *LhvCBox) Size() uint64 {
-	return uint64(boxHeaderSize) + b.DecConfRec.LHEVCSize()
+	return uint64(boxHeaderSize) + b.LHEVCSize()
 }
 
 // Encode - write box to w
@@ -54,7 +54,7 @@ func (b *LhvCBox) Encode(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return b.DecConfRec.EncodeLHEVC(w)
+	return b.EncodeLHEVC(w)
 }
 
 // EncodeSW - write box to sw
@@ -63,7 +63,7 @@ func (b *LhvCBox) EncodeSW(sw bits.SliceWriter) error {
 	if err != nil {
 		return err
 	}
-	return b.DecConfRec.EncodeLHEVCSW(sw)
+	return b.EncodeLHEVCSW(sw)
 }
 
 // Info - box-specific Info
