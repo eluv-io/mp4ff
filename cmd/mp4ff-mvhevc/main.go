@@ -599,8 +599,8 @@ func parseMp4Input(inPath string, w io.Writer) (*mvhevcInput, error) {
 	// Extract enhancement layer parameter sets from lhvC
 	var enhSPS, enhPPS [][]byte
 	if vse.LhvC != nil {
-		enhSPS = vse.LhvC.DecConfRec.GetNalusForType(hevc.NALU_SPS)
-		enhPPS = vse.LhvC.DecConfRec.GetNalusForType(hevc.NALU_PPS)
+		enhSPS = vse.LhvC.GetNalusForType(hevc.NALU_SPS)
+		enhPPS = vse.LhvC.GetNalusForType(hevc.NALU_PPS)
 	}
 
 	fmt.Fprintf(w, "Base VPS: %d, SPS: %d, PPS: %d, SEI: %d\n",
