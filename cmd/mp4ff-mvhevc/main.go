@@ -408,6 +408,17 @@ func parseAnnexBInput(inPath string, fps float64, w io.Writer) (*mvhevcInput, er
 	var currentAU []sampleNalu
 	lastIsVideo := false
 
+	// Track seen parameter sets to avoid duplicates — x265 repeats
+	// VPS/SPS/PPS before every IDR but hvcC should only have unique entries.
+	seen := make(map[string]bool)
+	addUnique := func(dst *[][]byte, nalu []byte) {
+		key := string(nalu)
+		if !seen[key] {
+			seen[key] = true
+			*dst = append(*dst, nalu)
+		}
+	}
+
 	for _, nalu := range allNalus {
 		if len(nalu) < 2 {
 			continue
@@ -419,24 +430,24 @@ func parseAnnexBInput(inPath string, fps float64, w io.Writer) (*mvhevcInput, er
 		switch {
 		case naluType == hevc.NALU_VPS:
 			if layerID == 0 {
-				baseVPS = append(baseVPS, nalu)
+				addUnique(&baseVPS, nalu)
 			}
 		case naluType == hevc.NALU_SPS:
 			if layerID == 0 {
-				baseSPS = append(baseSPS, nalu)
+				addUnique(&baseSPS, nalu)
 			} else {
-				enhSPS = append(enhSPS, nalu)
+				addUnique(&enhSPS, nalu)
 			}
 		case naluType == hevc.NALU_PPS:
 			if layerID == 0 {
-				basePPS = append(basePPS, nalu)
+				addUnique(&basePPS, nalu)
 			} else {
-				enhPPS = append(enhPPS, nalu)
+				addUnique(&enhPPS, nalu)
 			}
 		case naluType == hevc.NALU_SEI_PREFIX ||
 			naluType == hevc.NALU_SEI_SUFFIX:
 			if layerID == 0 {
-				baseSEI = append(baseSEI, nalu)
+				addUnique(&baseSEI, nalu)
 			}
 		case naluType <= 31: // Video NALUs (slice types)
 			sn := sampleNalu{nalu: nalu, layerID: layerID}
@@ -589,18 +600,19 @@ func parseMp4Input(inPath string, w io.Writer) (*mvhevcInput, error) {
 	fmt.Fprintf(w, "Input MP4: %s (%dx%d)\n",
 		vse.Type(), vse.Width, vse.Height)
 
-	// Extract parameter sets from hvcC
+	// Extract parameter sets from hvcC (deduplicate — some muxers repeat
+	// VPS/SPS/PPS for every IDR, but hvcC should only have unique entries)
 	hdcr := vse.HvcC.DecConfRec
-	baseVPS := hdcr.GetNalusForType(hevc.NALU_VPS)
-	baseSPS := hdcr.GetNalusForType(hevc.NALU_SPS)
-	basePPS := hdcr.GetNalusForType(hevc.NALU_PPS)
-	baseSEI := hdcr.GetNalusForType(hevc.NALU_SEI_PREFIX)
+	baseVPS := dedupNalus(hdcr.GetNalusForType(hevc.NALU_VPS))
+	baseSPS := dedupNalus(hdcr.GetNalusForType(hevc.NALU_SPS))
+	basePPS := dedupNalus(hdcr.GetNalusForType(hevc.NALU_PPS))
+	baseSEI := dedupNalus(hdcr.GetNalusForType(hevc.NALU_SEI_PREFIX))
 
 	// Extract enhancement layer parameter sets from lhvC
 	var enhSPS, enhPPS [][]byte
 	if vse.LhvC != nil {
-		enhSPS = vse.LhvC.GetNalusForType(hevc.NALU_SPS)
-		enhPPS = vse.LhvC.GetNalusForType(hevc.NALU_PPS)
+		enhSPS = dedupNalus(vse.LhvC.GetNalusForType(hevc.NALU_SPS))
+		enhPPS = dedupNalus(vse.LhvC.GetNalusForType(hevc.NALU_PPS))
 	}
 
 	fmt.Fprintf(w, "Base VPS: %d, SPS: %d, PPS: %d, SEI: %d\n",
@@ -925,4 +937,20 @@ func fpsToTimescale(fps float64) (timeScale uint32, sampleDur uint32) {
 		ts := uint32(fps * 1000)
 		return ts, 1000
 	}
+}
+
+// dedupNalus removes duplicate NALUs from a slice, keeping only unique entries.
+// MP4Box and some muxers repeat VPS/SPS/PPS for every IDR; the hvcC should
+// contain only unique parameter sets.
+func dedupNalus(nalus [][]byte) [][]byte {
+	seen := make(map[string]bool, len(nalus))
+	out := make([][]byte, 0, len(nalus))
+	for _, n := range nalus {
+		key := string(n)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, n)
+		}
+	}
+	return out
 }
