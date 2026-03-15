@@ -216,6 +216,33 @@ func runInfo(args []string, w io.Writer) error {
 			}
 		}
 
+		// Timing and sync sample info
+		nrSamples := trak.GetNrSamples()
+		timeScale := trak.Mdia.Mdhd.Timescale
+		var sampleDur uint32
+		if stbl.Stts != nil && len(stbl.Stts.SampleTimeDelta) > 0 {
+			sampleDur = stbl.Stts.SampleTimeDelta[0]
+		}
+		if sampleDur > 0 {
+			fps := float64(timeScale) / float64(sampleDur)
+			fmt.Fprintf(w, "  Samples: %d, Timescale: %d, SampleDur: %d (%.3f fps)\n",
+				nrSamples, timeScale, sampleDur, fps)
+		} else {
+			fmt.Fprintf(w, "  Samples: %d, Timescale: %d\n",
+				nrSamples, timeScale)
+		}
+		if stbl.Stss != nil {
+			syncNrs := stbl.Stss.SampleNumber
+			fmt.Fprintf(w, "  Sync samples (%d):", len(syncNrs))
+			for i, sn := range syncNrs {
+				if i > 0 && i < len(syncNrs) {
+					fmt.Fprintf(w, "  interval=%d", sn-syncNrs[i-1])
+				}
+				fmt.Fprintf(w, " %d", sn)
+			}
+			fmt.Fprintln(w)
+		}
+
 		// Check for oinf/linf sample groups
 		for _, child := range stbl.Children {
 			sgpd, ok := child.(*mp4.SgpdBox)
@@ -754,7 +781,7 @@ func buildAndWriteMp4(inp *mvhevcInput, outPath string, w io.Writer) error {
 
 	// Create progressive MP4
 	outFile := mp4.NewFile()
-	outFile.AddChild(mp4.NewFtyp("iso4", 1, []string{"iso4"}), 0)
+	outFile.AddChild(mp4.NewFtyp("isom", 0, []string{"isom", "iso2", "mp41"}), 0)
 
 	moov := mp4.NewMoovBox()
 	moov.AddChild(mp4.CreateMvhd())
@@ -905,6 +932,16 @@ func buildAndWriteMp4(inp *mvhevcInput, outPath string, w io.Writer) error {
 	mdatBox := &mp4.MdatBox{}
 	mdatBox.SetData(mdatData)
 	outFile.AddChild(mdatBox, 0)
+
+	// Fix stco: chunk offset must point to mdat payload start.
+	// Layout is ftyp | moov | mdat_header | mdat_payload.
+	var sizeBeforeMdat uint64
+	for _, box := range outFile.Children {
+		if box.Type() != "mdat" {
+			sizeBeforeMdat += box.Size()
+		}
+	}
+	stco.ChunkOffset[0] = uint32(sizeBeforeMdat + mdatBox.HeaderSize())
 
 	// Write output
 	ofd, err := os.Create(outPath)
