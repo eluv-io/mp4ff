@@ -83,8 +83,11 @@ type mvhevcSample struct {
 
 func runInfo(args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("info", flag.ContinueOnError)
+	var showIDR bool
+	fs.BoolVar(&showIDR, "idr", false, "Show IDR (sync) frame positions")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "%s info <input.mp4>\n", appName)
+		fmt.Fprintf(os.Stderr, "%s info [-idr] <input.mp4>\n", appName)
+		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -217,30 +220,40 @@ func runInfo(args []string, w io.Writer) error {
 		}
 
 		// Timing and sync sample info
-		nrSamples := trak.GetNrSamples()
 		timeScale := trak.Mdia.Mdhd.Timescale
-		var sampleDur uint32
-		if stbl.Stts != nil && len(stbl.Stts.SampleTimeDelta) > 0 {
-			sampleDur = stbl.Stts.SampleTimeDelta[0]
-		}
-		if sampleDur > 0 {
-			fps := float64(timeScale) / float64(sampleDur)
-			fmt.Fprintf(w, "  Samples: %d, Timescale: %d, SampleDur: %d (%.3f fps)\n",
-				nrSamples, timeScale, sampleDur, fps)
+		trackID := trak.Tkhd.TrackID
+
+		if parsedMp4.IsFragmented() {
+			// Fragmented: samples are in trun boxes inside moof/traf
+			printFragmentedInfo(parsedMp4, trackID, timeScale,
+				showIDR, w)
 		} else {
-			fmt.Fprintf(w, "  Samples: %d, Timescale: %d\n",
-				nrSamples, timeScale)
-		}
-		if stbl.Stss != nil {
-			syncNrs := stbl.Stss.SampleNumber
-			fmt.Fprintf(w, "  Sync samples (%d):", len(syncNrs))
-			for i, sn := range syncNrs {
-				if i > 0 && i < len(syncNrs) {
-					fmt.Fprintf(w, "  interval=%d", sn-syncNrs[i-1])
-				}
-				fmt.Fprintf(w, " %d", sn)
+			nrSamples := trak.GetNrSamples()
+			var sampleDur uint32
+			if stbl.Stts != nil && len(stbl.Stts.SampleTimeDelta) > 0 {
+				sampleDur = stbl.Stts.SampleTimeDelta[0]
 			}
-			fmt.Fprintln(w)
+			if sampleDur > 0 {
+				fps := float64(timeScale) / float64(sampleDur)
+				fmt.Fprintf(w, "  Samples: %d, Timescale: %d, SampleDur: %d (%.3f fps)\n",
+					nrSamples, timeScale, sampleDur, fps)
+			} else {
+				fmt.Fprintf(w, "  Samples: %d, Timescale: %d\n",
+					nrSamples, timeScale)
+			}
+			if stbl.Stss != nil && showIDR {
+				syncNrs := stbl.Stss.SampleNumber
+				fmt.Fprintf(w, "  Sync (IDR) frames (%d):\n", len(syncNrs))
+				for i, sn := range syncNrs {
+					if i == 0 {
+						fmt.Fprintf(w, "    frame %d\n", sn)
+					} else {
+						interval := sn - syncNrs[i-1]
+						fmt.Fprintf(w, "    frame %d (interval=%d)\n",
+							sn, interval)
+					}
+				}
+			}
 		}
 
 		// Check for oinf/linf sample groups
@@ -320,6 +333,80 @@ func runInfo(args []string, w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// printFragmentedInfo prints timing and sync sample info for fragmented MP4.
+func printFragmentedInfo(f *mp4.File, trackID uint32, timeScale uint32,
+	showIDR bool, w io.Writer) {
+
+	var totalSamples uint32
+	var sampleDur uint32
+	var syncFrames []uint32
+	sampleNr := uint32(0)
+
+	for _, seg := range f.Segments {
+		for _, frag := range seg.Fragments {
+			if frag.Moof == nil {
+				continue
+			}
+			for _, traf := range frag.Moof.Trafs {
+				if traf.Tfhd.TrackID != trackID {
+					continue
+				}
+				// Resolve defaults from tfhd
+				var defaultFlags uint32
+				if traf.Tfhd.HasDefaultSampleFlags() {
+					defaultFlags = traf.Tfhd.DefaultSampleFlags
+				}
+				if sampleDur == 0 && traf.Tfhd.HasDefaultSampleDuration() {
+					sampleDur = traf.Tfhd.DefaultSampleDuration
+				}
+				for _, trun := range traf.Truns {
+					for i, s := range trun.Samples {
+						sampleNr++
+						if sampleDur == 0 && s.Dur > 0 {
+							sampleDur = s.Dur
+						}
+						flags := s.Flags
+						if !trun.HasSampleFlags() {
+							if i == 0 && trun.HasFirstSampleFlags() {
+								fsf, _ := trun.FirstSampleFlags()
+								flags = fsf
+							} else {
+								flags = defaultFlags
+							}
+						}
+						if mp4.IsSyncSampleFlags(flags) {
+							syncFrames = append(syncFrames, sampleNr)
+						}
+					}
+					totalSamples += trun.SampleCount()
+				}
+			}
+		}
+	}
+
+	if sampleDur > 0 {
+		fps := float64(timeScale) / float64(sampleDur)
+		fmt.Fprintf(w, "  Samples: %d, Timescale: %d, SampleDur: %d (%.3f fps)\n",
+			totalSamples, timeScale, sampleDur, fps)
+	} else {
+		fmt.Fprintf(w, "  Samples: %d, Timescale: %d\n",
+			totalSamples, timeScale)
+	}
+
+	if showIDR && len(syncFrames) > 0 {
+		fmt.Fprintf(w, "  Sync (IDR) frames (%d):\n", len(syncFrames))
+		for i, sn := range syncFrames {
+			if i == 0 {
+				fmt.Fprintf(w, "    frame %d\n", sn)
+			} else {
+				interval := sn - syncFrames[i-1]
+				fmt.Fprintf(w, "    frame %d (interval=%d)\n",
+					sn, interval)
+			}
+		}
+	}
 }
 
 func runAdd(args []string, w io.Writer) error {
