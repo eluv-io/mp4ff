@@ -47,6 +47,8 @@ func init() {
 		"desc":    DecodeGenericContainerBoxSR,
 		"dinf":    DecodeDinfSR,
 		"dpnd":    DecodeTrefTypeSR,
+		"dvh1":    DecodeVisualSampleEntrySR,
+		"dvhe":    DecodeVisualSampleEntrySR,
 		"dref":    DecodeDrefSR,
 		"ec-3":    DecodeAudioSampleEntrySR,
 		"edts":    DecodeEdtsSR,
