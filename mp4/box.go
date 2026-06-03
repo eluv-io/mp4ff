@@ -56,6 +56,8 @@ func init() {
 		"desc":    DecodeGenericContainerBox,
 		"dinf":    DecodeDinf,
 		"dpnd":    DecodeTrefType,
+		"dvh1":    DecodeVisualSampleEntry,
+		"dvhe":    DecodeVisualSampleEntry,
 		"dref":    DecodeDref,
 		"ec-3":    DecodeAudioSampleEntry,
 		"edts":    DecodeEdts,
