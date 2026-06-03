@@ -18,7 +18,9 @@ type StsdBox struct {
 	SampleCount uint32
 	// AvcX is a pointer to box with name avc1 or avc3
 	AvcX *VisualSampleEntryBox
-	// HvcX is a pointer to a box with name hvc1 or hev1
+	// HvcX is a pointer to a box with name hvc1, hev1, dvh1, or dvhe.
+	// dvh1/dvhe are Dolby Vision HEVC sample entries (ISO/IEC 14496-15 §8.5.1)
+	// and share the same structure as hvc1/hev1 (hvcC + dvvC children).
 	HvcX *VisualSampleEntryBox
 	// VvcX is apointer to a box with name vvc1 or vvi1
 	VvcX *VisualSampleEntryBox
@@ -63,7 +65,7 @@ func (s *StsdBox) AddChild(box Box) {
 	switch box.Type() {
 	case "avc1", "avc3":
 		s.AvcX = box.(*VisualSampleEntryBox)
-	case "hvc1", "hev1":
+	case "hvc1", "hev1", "dvh1", "dvhe":
 		s.HvcX = box.(*VisualSampleEntryBox)
 	case "vvc1", "vvi1":
 		s.VvcX = box.(*VisualSampleEntryBox)

@@ -42,12 +42,12 @@ codec-specific boxes. The codecs and their boxes are
 
 | Type| Codec | Sample Entry | Config Box | Other Boxes |
 | ----- | ----| ---- | ---- | ---- |
-| Video | AVC/H.264 | avc1, avc3 | avcC | btrt, pasp, colr |
-| Video | HEVC/H.265 | hvc1, hev1 | hvcC | btrt, pasp, colr |
-| Video | AV1 | av01 | av1C | btrt, pasp, colr |
-| Video | AVS3 | avs3 | av3c | btrt, pasp, colr |
-| Video | VP8/VP9 | vp08, vp09 | vpcC | btrt, pasp, colr |
-| Video | VVC/H.266 | vvc1, vvi1 | vvcC | btrt, pasp, colr |
+| Video | AVC/H.264 | avc1, avc3 | avcC | btrt, pasp, colr, clli, mdcv |
+| Video | HEVC/H.265 | hvc1, hev1 | hvcC | btrt, pasp, colr, clli, mdcv |
+| Video | AV1 | av01 | av1C | btrt, pasp, colr, clli, mdcv |
+| Video | AVS3 | avs3 | av3c | btrt, pasp, colr, clli, mdcv |
+| Video | VP8/VP9 | vp08, vp09 | vpcC | btrt, pasp, colr, clli, mdcv |
+| Video | VVC/H.266 | vvc1, vvi1 | vvcC | btrt, pasp, colr, clli, mdcv |
 | Video | Encrypted | encv | sinf | btrt |
 | Audio | AAC | mp4a | esds | btrt |
 | Audio | AC-3 | ac-3 | dac3 | btrt |

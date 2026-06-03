@@ -325,7 +325,7 @@ func InitProtect(init *InitSegment, key, iv []byte, scheme string, kid UUID, pss
 			if err != nil {
 				return nil, fmt.Errorf("get avc protect func: %w", err)
 			}
-		case "hvc1", "hev1":
+		case "hvc1", "hev1", "dvh1", "dvhe":
 			ipd.ProtFunc, err = getHEVCProtFunc(se.HvcC)
 			if err != nil {
 				return nil, fmt.Errorf("get hevc protect func: %w", err)
@@ -764,12 +764,12 @@ func ExtractInitProtectData(inSeg *InitSegment) (*InitProtectData, error) {
 			sinf = box.Sinf
 			frma := sinf.Frma
 			switch frma.DataFormat {
-			case "avc1":
+			case "avc1", "avc3":
 				ipd.ProtFunc, err = getAVCProtFunc(box.AvcC)
 				if err != nil {
 					return nil, fmt.Errorf("get AVC protect func: %w", err)
 				}
-			case "hvc1":
+			case "hvc1", "dvh1":
 				ipd.ProtFunc, err = getHEVCProtFunc(box.HvcC)
 				if err != nil {
 					return nil, fmt.Errorf("get HEVC protect func: %w", err)
